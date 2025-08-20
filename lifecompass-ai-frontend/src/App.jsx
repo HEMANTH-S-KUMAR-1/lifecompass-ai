@@ -543,24 +543,6 @@ const CareerCompassChatbot = ({ backendStatus }) => {
             setIsLoading(false);
         }
     };
-        
-        try {
-            const response = await axios.post('http://localhost:8000/api/chat', { message: inputValue });
-            const aiMessage = { sender: 'ai', text: response.data.reply };
-            setMessages(prev => [...prev, aiMessage]);
-        } catch (error) {
-            console.error("Error communicating with chatbot API:", error);
-            let errorMessage;
-            if (error.response?.status === 503) {
-                errorMessage = { sender: 'ai', text: error.response.data.detail };
-            } else {
-                errorMessage = { sender: 'ai', text: "I'm sorry, I'm having trouble connecting right now." };
-            }
-            setMessages(prev => [...prev, errorMessage]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     return (
         <>
