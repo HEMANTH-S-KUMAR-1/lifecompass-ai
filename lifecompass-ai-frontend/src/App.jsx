@@ -29,15 +29,44 @@ const mockSeekerProfiles = [
 export default function App() {
     const [currentPage, setCurrentPage] = useState('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [backendMessage, setBackendMessage] = useState('');
+    const [backendStatus, setBackendStatus] = useState({
+        connected: false,
+        supabase_configured: false,
+        ai_providers: {
+            configured_providers: [],
+            total_configured: 0,
+            primary_provider: null
+        },
+        message: 'Connecting...'
+    });
 
     useEffect(() => {
         const apiUrl = 'http://localhost:8000/';
         axios.get(apiUrl)
-            .then(response => setBackendMessage('Connected'))
+            .then(response => {
+                setBackendStatus({
+                    connected: true,
+                    supabase_configured: response.data.supabase_configured,
+                    ai_providers: response.data.ai_providers || {
+                        configured_providers: [],
+                        total_configured: 0,
+                        primary_provider: null
+                    },
+                    message: 'Connected'
+                });
+            })
             .catch(error => {
                 console.error("Error connecting to backend:", error);
-                setBackendMessage("Connection Failed");
+                setBackendStatus({
+                    connected: false,
+                    supabase_configured: false,
+                    ai_providers: {
+                        configured_providers: [],
+                        total_configured: 0,
+                        primary_provider: null
+                    },
+                    message: 'Connection Failed'
+                });
             });
     }, []);
 
@@ -52,7 +81,7 @@ export default function App() {
             case 'home':
                 return <HomePage navigateTo={navigateTo} />;
             case 'seeker':
-                return <CareerCockpit navigateTo={navigateTo} />;
+                return <CareerCockpit navigateTo={navigateTo} backendStatus={backendStatus} />;
             case 'recruiter':
                 return <TalentHQ navigateTo={navigateTo} />;
             default:
@@ -62,11 +91,7 @@ export default function App() {
 
     return (
         <div className="bg-gray-50 min-h-screen text-gray-800 font-sans">
-            {backendMessage && (
-                <div className={`${backendMessage === 'Connected' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-red-100 border-red-500 text-red-700'} border-l-4 p-2 text-center text-sm`}>
-                    <p><strong>Backend Status:</strong> {backendMessage}</p>
-                </div>
-            )}
+            <ConfigurationBanner backendStatus={backendStatus} />
             <Navbar navigateTo={navigateTo} isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
             <AnimatePresence mode="wait">
                 <motion.div
@@ -85,6 +110,62 @@ export default function App() {
 }
 
 // --- Reusable Components ---
+const ConfigurationBanner = ({ backendStatus }) => {
+    if (!backendStatus.connected) {
+        return (
+            <div className="bg-red-100 border-red-500 text-red-700 border-l-4 p-3 text-center text-sm">
+                <p><strong>⚠️ Backend Connection Failed</strong></p>
+                <p>Please ensure the backend server is running on http://localhost:8000</p>
+            </div>
+        );
+    }
+
+    const aiConfigured = backendStatus.ai_providers.total_configured > 0;
+    
+    if (!backendStatus.supabase_configured || !aiConfigured) {
+        return (
+            <div className="bg-yellow-100 border-yellow-500 text-yellow-700 border-l-4 p-3 text-center text-sm">
+                <p><strong>⚙️ Configuration Required</strong></p>
+                <div className="flex justify-center items-center gap-4 mt-1 text-xs">
+                    <span className={`flex items-center gap-1 ${backendStatus.supabase_configured ? 'text-green-600' : 'text-red-600'}`}>
+                        {backendStatus.supabase_configured ? '✅' : '❌'} Supabase
+                    </span>
+                    <span className={`flex items-center gap-1 ${aiConfigured ? 'text-green-600' : 'text-red-600'}`}>
+                        {aiConfigured ? '✅' : '❌'} AI Providers ({backendStatus.ai_providers.total_configured})
+                    </span>
+                </div>
+                {aiConfigured && backendStatus.ai_providers.configured_providers.length > 0 && (
+                    <div className="text-xs mt-1">
+                        <span className="text-green-600">Active: </span>
+                        {backendStatus.ai_providers.configured_providers.map(p => p.name).join(', ')}
+                        {backendStatus.ai_providers.primary_provider && (
+                            <span className="text-blue-600"> (Primary: {backendStatus.ai_providers.primary_provider})</span>
+                        )}
+                    </div>
+                )}
+                <p className="text-xs mt-1">
+                    {!aiConfigured ? 'No AI providers configured. ' : ''}
+                    {!backendStatus.supabase_configured ? 'Supabase required for database features. ' : ''}
+                    Please configure your API keys in the backend .env file.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-green-100 border-green-500 text-green-700 border-l-4 p-2 text-center text-sm">
+            <p><strong>✅ All Systems Ready</strong> - Backend connected with {backendStatus.ai_providers.total_configured} AI provider(s)</p>
+            <div className="text-xs mt-1">
+                <span className="text-green-600">Available: </span>
+                {backendStatus.ai_providers.configured_providers.map(p => p.name).join(', ')}
+                {backendStatus.ai_providers.primary_provider && (
+                    <span className="text-blue-600"> (Primary: {backendStatus.ai_providers.primary_provider})</span>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const TabButton = ({ title, isActive, onClick }) => (
     <button
         onClick={onClick}
@@ -137,7 +218,7 @@ const Footer = ({ navigateTo }) => {
 };
 
 // --- Job Seeker Components ---
-const CareerCockpit = ({ navigateTo }) => {
+const CareerCockpit = ({ navigateTo, backendStatus }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const renderContent = () => {
         switch(activeTab) {
@@ -153,7 +234,7 @@ const CareerCockpit = ({ navigateTo }) => {
             <h1 className="text-4xl font-bold text-gray-900">Career Cockpit 🚀</h1><p className="mt-2 text-lg text-gray-600">Your central hub for launching a global career.</p>
             <div className="mt-8 border-b border-gray-200"><nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs"><TabButton title="Dashboard" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} /><TabButton title="Global Job Search" isActive={activeTab === 'search'} onClick={() => setActiveTab('search')} /><TabButton title="Learning Paths" isActive={activeTab === 'learning'} onClick={() => setActiveTab('learning')} /><TabButton title="My Profile" isActive={activeTab === 'profile'} onClick={() => setActiveTab('profile')} /></nav></div>
             <div className="mt-8">{renderContent()}</div>
-            <CareerCompassChatbot />
+            <CareerCompassChatbot backendStatus={backendStatus} />
         </div>
     );
 };
@@ -385,9 +466,21 @@ const TalentSearch = () => (
 // --- Chatbot Component ---
 const FeatureCard = ({ icon, title, subtitle, description, onClick }) => (<motion.div whileHover={{ y: -5, boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" }} className="bg-white p-8 rounded-xl shadow-md cursor-pointer" onClick={onClick}><div className="flex items-center gap-6"><div className="flex-shrink-0 bg-indigo-600 p-4 rounded-full">{icon}</div><div><h3 className="text-lg font-medium text-gray-500">{title}</h3><p className="text-2xl font-bold text-gray-900">{subtitle}</p></div></div><p className="mt-6 text-gray-600">{description}</p></motion.div>);
 
-const CareerCompassChatbot = () => {
+const CareerCompassChatbot = ({ backendStatus }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState([ { sender: 'ai', text: "Hello! I'm Career Compass. How can I help you with your global career journey today?" } ]);
+    const [selectedProvider, setSelectedProvider] = useState('');
+    
+    const aiConfigured = backendStatus?.ai_providers?.total_configured > 0;
+    const availableProviders = backendStatus?.ai_providers?.configured_providers || [];
+    
+    const [messages, setMessages] = useState([ 
+        { 
+            sender: 'ai', 
+            text: aiConfigured 
+                ? `Hello! I'm Career Compass. I'm powered by ${availableProviders.length} AI provider(s). How can I help you with your global career journey today?` 
+                : "Hello! I'm Career Compass, but I need at least one AI provider to be configured to provide personalized advice. Please ask the developer to set up an AI API key (Google AI, OpenAI, Anthropic, Hugging Face, or Ollama)."
+        } 
+    ]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const chatEndRef = useRef(null);
@@ -397,17 +490,72 @@ const CareerCompassChatbot = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!inputValue.trim() || isLoading) return;
+        
+        // Check if any AI provider is configured
+        if (!aiConfigured) {
+            const userMessage = { sender: 'user', text: inputValue };
+            const errorMessage = { 
+                sender: 'ai', 
+                text: "I'm sorry, but I can't provide AI responses right now because no AI providers are configured. Please ask the developer to set up at least one AI API key (Google AI, OpenAI, Anthropic, Hugging Face, or Ollama) in the backend environment variables."
+            };
+            setMessages(prev => [...prev, userMessage, errorMessage]);
+            setInputValue('');
+            return;
+        }
+        
         const userMessage = { sender: 'user', text: inputValue };
         setMessages(prev => [...prev, userMessage]);
         setInputValue('');
         setIsLoading(true);
+        
+        try {
+            const requestBody = { 
+                message: inputValue,
+                ...(selectedProvider && { provider: selectedProvider })
+            };
+            
+            const response = await axios.post('http://localhost:8000/api/chat', requestBody);
+            
+            let aiText = response.data.reply;
+            const provider = response.data.provider;
+            const isFallback = response.data.fallback;
+            
+            if (isFallback) {
+                aiText = `[Fallback] ${aiText}`;
+            }
+            
+            const aiMessage = { 
+                sender: 'ai', 
+                text: aiText,
+                provider: provider
+            };
+            setMessages(prev => [...prev, aiMessage]);
+        } catch (error) {
+            console.error("Error communicating with chatbot API:", error);
+            let errorMessage;
+            if (error.response?.status === 503) {
+                errorMessage = { sender: 'ai', text: `Service Error: ${error.response.data.detail}` };
+            } else {
+                errorMessage = { sender: 'ai', text: "I'm sorry, I'm having trouble connecting right now. Please try again." };
+            }
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+        
         try {
             const response = await axios.post('http://localhost:8000/api/chat', { message: inputValue });
             const aiMessage = { sender: 'ai', text: response.data.reply };
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
             console.error("Error communicating with chatbot API:", error);
-            const errorMessage = { sender: 'ai', text: "I'm sorry, I'm having trouble connecting right now." };
+            let errorMessage;
+            if (error.response?.status === 503) {
+                errorMessage = { sender: 'ai', text: error.response.data.detail };
+            } else {
+                errorMessage = { sender: 'ai', text: "I'm sorry, I'm having trouble connecting right now." };
+            }
             setMessages(prev => [...prev, errorMessage]);
         } finally {
             setIsLoading(false);
@@ -430,12 +578,34 @@ const CareerCompassChatbot = () => {
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                     className="fixed bottom-24 right-6 w-full max-w-sm h-[60vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
                 >
-                    <div className="bg-indigo-600 text-white p-4 rounded-t-xl flex-shrink-0"><h3 className="font-bold text-lg">Career Compass 🧭</h3><p className="text-sm opacity-90">Your AI Career Advisor</p></div>
+                    <div className="bg-indigo-600 text-white p-4 rounded-t-xl flex-shrink-0">
+                        <h3 className="font-bold text-lg">Career Compass 🧭</h3>
+                        <p className="text-sm opacity-90">Your AI Career Advisor</p>
+                        {availableProviders.length > 1 && (
+                            <select 
+                                value={selectedProvider} 
+                                onChange={(e) => setSelectedProvider(e.target.value)}
+                                className="mt-2 text-xs bg-indigo-500 text-white border border-indigo-400 rounded px-2 py-1"
+                            >
+                                <option value="">Auto (Primary)</option>
+                                {availableProviders.map(provider => (
+                                    <option key={provider.id} value={provider.id}>
+                                        {provider.name}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
                     <div className="flex-grow p-4 overflow-y-auto bg-gray-50">
                         {messages.map((msg, index) => (
                             <div key={index} className={`flex items-start gap-2.5 my-2 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
                                 {msg.sender === 'ai' && <div className="flex-shrink-0 bg-indigo-500 text-white rounded-full h-8 w-8 flex items-center justify-center"><Bot size={18}/></div>}
-                                <div className={`p-3 rounded-lg max-w-xs ${msg.sender === 'user' ? 'bg-indigo-100 text-gray-800 rounded-br-none' : 'bg-white text-gray-800 shadow-sm rounded-bl-none'}`}><p className="text-sm">{msg.text}</p></div>
+                                <div className={`p-3 rounded-lg max-w-xs ${msg.sender === 'user' ? 'bg-indigo-100 text-gray-800 rounded-br-none' : 'bg-white text-gray-800 shadow-sm rounded-bl-none'}`}>
+                                    <p className="text-sm">{msg.text}</p>
+                                    {msg.provider && msg.sender === 'ai' && (
+                                        <p className="text-xs text-gray-500 mt-1 italic">— {msg.provider}</p>
+                                    )}
+                                </div>
                                 {msg.sender === 'user' && <div className="flex-shrink-0 bg-gray-300 text-gray-700 rounded-full h-8 w-8 flex items-center justify-center"><User size={18}/></div>}
                             </div>
                         ))}
