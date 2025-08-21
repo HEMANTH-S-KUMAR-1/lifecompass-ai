@@ -39,10 +39,15 @@ The project consists of three main components:
    ```
    pip install -r requirements.txt
    ```
-3. Configure Supabase (see SUPABASE_SETUP.md for details)
-4. Run the backend server:
+3. Configure environment:
    ```
-   python main.py
+   cp .env.example .env
+   # Edit .env with your API keys or use ENABLE_MOCK_AI=true for testing
+   ```
+4. Configure Supabase (see SUPABASE_SETUP.md for details)
+5. Run the backend server:
+   ```
+   python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
    ```
 
 ### Frontend Setup

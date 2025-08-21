@@ -93,9 +93,23 @@ else:
     supabase = None
 
 # Initialize AI Provider Manager
-ai_manager = AIProviderManager()
-ai_status = ai_manager.get_status()
-print(f"✅ AI Provider Manager initialized with {ai_status['total_configured']} provider(s)")
+try:
+    ai_manager = AIProviderManager()
+    ai_status = ai_manager.get_status()
+    
+    if ai_status['total_configured'] > 0:
+        print(f"✅ AI Provider Manager initialized with {ai_status['total_configured']} provider(s)")
+        for provider in ai_status['configured_providers']:
+            print(f"  ✓ {provider['name']} - {provider['status']}")
+        print(f"  🎯 Primary provider: {ai_status['primary_provider']}")
+    else:
+        print("⚠️ No AI providers configured. Set ENABLE_MOCK_AI=true for testing or configure a provider.")
+        # Check if .env file exists at all
+        if not os.path.exists('.env'):
+            print("❌ .env file not found. Copy .env.example to .env and configure your providers.")
+except Exception as e:
+    print(f"❌ Error initializing AI Provider Manager: {e}")
+    ai_manager = None
 
 if ai_status['configured_providers']:
     for provider in ai_status['configured_providers']:
@@ -472,12 +486,18 @@ def get_database_status():
 
 @app.post("/api/chat")
 def chat_with_ai(chat_message: ChatMessage):
+    if not ai_manager:
+        raise HTTPException(
+            status_code=503, 
+            detail="AI provider system not initialized. Please check server logs."
+        )
+    
     ai_status = ai_manager.get_status()
     
     if ai_status['total_configured'] == 0:
         raise HTTPException(
             status_code=503, 
-            detail="No AI providers configured. Please set up at least one AI API key (GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, HUGGINGFACE_API_KEY, or run Ollama locally)."
+            detail="No AI providers configured. Please set up at least one AI API key or enable the mock provider with ENABLE_MOCK_AI=true in .env"
         )
     
     try:

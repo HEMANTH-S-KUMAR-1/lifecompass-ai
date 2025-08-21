@@ -19,20 +19,51 @@ function Start-BackendServer {
     # Check if virtual environment exists
     if (Test-Path $VenvPath) {
         # Activate virtual environment
-        & "$VenvPath\Scripts\Activate.ps1"
+        & "$PSScriptRoot\$VenvPath\Scripts\Activate.ps1"
         
         # Change to backend directory
         Set-Location $BackendPath
         
+        # Check if .env exists, if not create one with mock provider enabled
+        if (-not (Test-Path ".env")) {
+            Write-Host "No .env file found. Creating one with mock AI provider enabled for testing..." -ForegroundColor Yellow
+            Copy-Item ".env.example" ".env" -ErrorAction SilentlyContinue
+            Add-Content ".env" "`n# Added automatically for testing`nENABLE_MOCK_AI=true" -ErrorAction SilentlyContinue
+            Write-Host "✅ Created .env with mock AI provider for testing" -ForegroundColor Green
+        }
+        
         # Start the backend server
         Write-Host "✅ Starting FastAPI Server at http://127.0.0.1:8000" -ForegroundColor Green
-        Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$PSScriptRoot\$VenvPath\Scripts\Activate.ps1'; Set-Location '$PSScriptRoot\$BackendPath'; uvicorn main:app --reload --host 127.0.0.1 --port 8000"
+        Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$PSScriptRoot\$VenvPath\Scripts\Activate.ps1'; Set-Location '$PSScriptRoot\$BackendPath'; python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000"
         
         # Return to root directory
         Set-Location ..
     } else {
-        Write-Host "❌ Virtual environment not found. Please run setup.ps1 first." -ForegroundColor Red
-        exit 1
+        Write-Host "❌ Virtual environment not found. Creating one now..." -ForegroundColor Yellow
+        python -m venv $VenvPath
+        
+        if (Test-Path $VenvPath) {
+            Write-Host "✅ Virtual environment created successfully" -ForegroundColor Green
+            # Activate virtual environment
+            & "$PSScriptRoot\$VenvPath\Scripts\Activate.ps1"
+            
+            # Change to backend directory
+            Set-Location $BackendPath
+            
+            # Install dependencies
+            Write-Host "Installing backend dependencies..." -ForegroundColor Yellow
+            pip install -r requirements.txt
+            
+            # Start the backend server
+            Write-Host "✅ Starting FastAPI Server at http://127.0.0.1:8000" -ForegroundColor Green
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$PSScriptRoot\$VenvPath\Scripts\Activate.ps1'; Set-Location '$PSScriptRoot\$BackendPath'; python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000"
+            
+            # Return to root directory
+            Set-Location ..
+        } else {
+            Write-Host "❌ Failed to create virtual environment. Please run setup.ps1 first." -ForegroundColor Red
+            exit 1
+        }
     }
 }
 

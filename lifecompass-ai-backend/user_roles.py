@@ -6,7 +6,6 @@ Role management and permission enforcement for the ATS system
 from functools import wraps
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from flask import g, request, jsonify
 import jwt
 import os
 
@@ -289,23 +288,6 @@ def create_jwt_token(user: User) -> str:
     }
     
     return jwt.encode(payload, secret_key, algorithm="HS256")
-
-
-# Middleware for FastAPI (adapt as needed)
-def auth_middleware(request, db: Session):
-    """Authentication middleware"""
-    auth_header = request.headers.get("Authorization")
-    
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return None
-    
-    token = auth_header.split(" ")[1]
-    user = authenticate_user(token, db)
-    
-    if user:
-        set_current_user(user)
-    
-    return user
 
 
 # Permission checking utilities

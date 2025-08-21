@@ -1,558 +1,303 @@
 """
-AI Provider System for LifeCompass AI
-Supports multiple AI APIs including free and paid options
+AI Providers Module
+Multi-provider AI integration for chat and content generation
 """
 
 import os
-import json
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
-import requests
+import logging
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class AIResponse:
-    """Standardized AI response format"""
     success: bool
-    text: str
-    error: Optional[str] = None
+    text: Optional[str] = None
     provider: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
-class BaseAIProvider(ABC):
-    """Abstract base class for AI providers"""
-    
-    def __init__(self, api_key: str, **kwargs):
-        self.api_key = api_key
-        self.config = kwargs
-    
-    @abstractmethod
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        """Generate AI response from prompt"""
-        pass
-    
-    @abstractmethod
+class BaseAIProvider:
     def is_configured(self) -> bool:
-        """Check if provider is properly configured"""
-        pass
+        raise NotImplementedError
     
-    @property
-    @abstractmethod
-    def provider_name(self) -> str:
-        """Return provider name"""
-        pass
+    def generate_text(self, prompt: str) -> str:
+        raise NotImplementedError
 
-class GoogleGeminiProvider(BaseAIProvider):
-    """Google Gemini AI Provider"""
+class MockAIProvider(BaseAIProvider):
+    """Mock AI provider for development/testing without API keys"""
+    def __init__(self):
+        self.enabled = os.getenv("ENABLE_MOCK_AI", "").lower() in ("true", "1", "yes")
     
-    def __init__(self, api_key: str, model: str = "gemini-1.5-flash", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self._client = None
+    def is_configured(self) -> bool:
+        return self.enabled
+    
+    def generate_text(self, prompt: str) -> str:
+        """Return a mock response based on the prompt"""
+        if not self.enabled:
+            raise Exception("Mock AI provider not enabled. Set ENABLE_MOCK_AI=true in .env to use.")
         
-        if self.is_configured():
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                self._client = genai.GenerativeModel(model)
-            except ImportError:
-                print(f"Google Generative AI not installed. Install with: pip install google-generativeai")
-                self._client = None
-            except Exception as e:
-                print(f"Error initializing Google Gemini: {e}")
-                self._client = None
+        # Simple keywords-based response system for testing
+        if "career" in prompt.lower():
+            return "I can help with your career questions! For a real project, you would connect to an actual AI provider."
+        elif "job" in prompt.lower() or "work" in prompt.lower():
+            return "Looking for job advice? In a production environment, this would connect to Google AI, OpenAI, or another provider."
+        elif "hello" in prompt.lower() or "hi" in prompt.lower():
+            return "Hello! I'm a mock AI provider for testing LifeCompass AI without API keys. Enable a real provider in .env for production use."
+        else:
+            return f"This is a mock response from the testing provider. In production, LifeCompass would process: '{prompt[:30]}...' using a real AI service."
+
+class AIProviderManager:
+    def __init__(self):
+        self.providers = {
+            "google": GoogleAIProvider(),
+            "openai": OpenAIProvider(),
+            "anthropic": AnthropicProvider(),
+            "huggingface": HuggingFaceProvider(),
+            "ollama": OllamaProvider(),
+            "mock": MockAIProvider()  # Added mock provider for testing
+        }
+        # Allow explicit selection of provider from environment
+        self.primary_provider = os.getenv("PRIMARY_AI_PROVIDER") or self._determine_primary_provider()
     
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        if not self._client:
+    def _determine_primary_provider(self) -> Optional[str]:
+        """Determine which provider to use as primary based on available API keys"""
+        # Check if mock provider is explicitly enabled
+        if "mock" in self.providers and self.providers["mock"].is_configured():
+            return "mock"
+            
+        # Try providers in order of preference
+        provider_preference = ["google", "openai", "anthropic", "huggingface", "ollama"]
+        for name in provider_preference:
+            if name in self.providers and self.providers[name].is_configured():
+                return name
+        return None
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get status of all AI providers"""
+        configured_providers = []
+        available_providers = []
+        
+        for name, provider in self.providers.items():
+            provider_info = {
+                "name": name,
+                "configured": provider.is_configured(),
+                "status": "ready" if provider.is_configured() else "not configured"
+            }
+            
+            available_providers.append(provider_info)
+            
+            if provider.is_configured():
+                configured_providers.append(provider_info)
+        
+        return {
+            "available_providers": available_providers,
+            "configured_providers": configured_providers,
+            "primary_provider": self.primary_provider,
+            "total_configured": len(configured_providers)
+        }
+    
+    def generate_response(self, prompt: str, provider_name: Optional[str] = None) -> AIResponse:
+        """Generate AI response using specified provider or primary provider"""
+        
+        # Use specified provider or fall back to primary
+        target_provider = provider_name or self.primary_provider
+        
+        if not target_provider:
             return AIResponse(
                 success=False,
-                text="",
-                error="Google Gemini not properly configured",
-                provider=self.provider_name
+                error="No AI providers are configured. Set up at least one provider in .env or enable the mock provider with ENABLE_MOCK_AI=true"
             )
         
+        if target_provider not in self.providers:
+            return AIResponse(
+                success=False,
+                error=f"Provider '{target_provider}' not found"
+            )
+        
+        provider = self.providers[target_provider]
+        
+        if not provider.is_configured():
+            # Try to fall back to any configured provider
+            fallback_provider = self._determine_primary_provider()
+            if fallback_provider and fallback_provider != target_provider:
+                logger.warning(f"Provider '{target_provider}' not configured, falling back to '{fallback_provider}'")
+                return self.generate_response(prompt, fallback_provider)
+            else:
+                return AIResponse(
+                    success=False,
+                    error=f"Provider '{target_provider}' is not configured and no fallbacks are available"
+                )
+        
         try:
-            response = self._client.generate_content(prompt)
+            response_text = provider.generate_text(prompt)
             return AIResponse(
                 success=True,
-                text=response.text,
-                provider=self.provider_name
+                text=response_text,
+                provider=target_provider
             )
         except Exception as e:
             return AIResponse(
                 success=False,
-                text="",
-                error=f"Google Gemini error: {str(e)}",
-                provider=self.provider_name
+                error=str(e),
+                provider=target_provider
             )
+
+class GoogleAIProvider(BaseAIProvider):
+    def __init__(self):
+        self.api_key = os.getenv("GOOGLE_API_KEY")
+        self.model = os.getenv("GOOGLE_MODEL", "gemini-pro")
+        self.client = None
+        if self.api_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=self.api_key)
+                self.client = genai.GenerativeModel(self.model)
+            except ImportError:
+                logger.error("google-generativeai package not installed")
+            except Exception as e:
+                logger.error(f"Failed to initialize Google AI: {e}")
     
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
+        return self.api_key is not None
     
-    @property
-    def provider_name(self) -> str:
-        return "Google Gemini"
+    def generate_text(self, prompt: str) -> str:
+        if not self.api_key:
+            raise Exception("Google AI API key not configured")
+        
+        try:
+            import google.generativeai as genai
+            if not self.client:
+                genai.configure(api_key=self.api_key)
+                self.client = genai.GenerativeModel(self.model)
+                
+            response = self.client.generate_content(prompt)
+            return response.text
+        except ImportError:
+            raise Exception("google-generativeai package not installed. Run: pip install google-generativeai")
+        except Exception as e:
+            raise Exception(f"Google AI error: {str(e)}")
 
 class OpenAIProvider(BaseAIProvider):
-    """OpenAI GPT Provider"""
-    
-    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self.base_url = kwargs.get('base_url', 'https://api.openai.com/v1')
-    
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        if not self.is_configured():
-            return AIResponse(
-                success=False,
-                text="",
-                error="OpenAI API key not configured",
-                provider=self.provider_name
-            )
-        
-        try:
-            headers = {
-                'Authorization': f'Bearer {self.api_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            data = {
-                'model': self.model,
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': kwargs.get('max_tokens', 1000),
-                'temperature': kwargs.get('temperature', 0.7)
-            }
-            
-            response = requests.post(
-                f'{self.base_url}/chat/completions',
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return AIResponse(
-                    success=True,
-                    text=result['choices'][0]['message']['content'],
-                    provider=self.provider_name,
-                    usage=result.get('usage')
-                )
-            else:
-                return AIResponse(
-                    success=False,
-                    text="",
-                    error=f"OpenAI API error: {response.status_code} - {response.text}",
-                    provider=self.provider_name
-                )
-                
-        except Exception as e:
-            return AIResponse(
-                success=False,
-                text="",
-                error=f"OpenAI error: {str(e)}",
-                provider=self.provider_name
-            )
+    def __init__(self):
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = None
+        if self.api_key:
+            try:
+                import openai
+                self.client = openai.OpenAI(api_key=self.api_key)
+            except ImportError:
+                logger.error("openai package not installed")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI: {e}")
     
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
+        return self.api_key is not None and self.client is not None
     
-    @property
-    def provider_name(self) -> str:
-        return f"OpenAI ({self.model})"
+    def generate_text(self, prompt: str) -> str:
+        if not self.client:
+            raise Exception("OpenAI client not initialized")
+        
+        response = self.client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content
 
 class AnthropicProvider(BaseAIProvider):
-    """Anthropic Claude Provider"""
-    
-    def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self.base_url = 'https://api.anthropic.com/v1'
-    
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        if not self.is_configured():
-            return AIResponse(
-                success=False,
-                text="",
-                error="Anthropic API key not configured",
-                provider=self.provider_name
-            )
-        
-        try:
-            headers = {
-                'x-api-key': self.api_key,
-                'Content-Type': 'application/json',
-                'anthropic-version': '2023-06-01'
-            }
-            
-            data = {
-                'model': self.model,
-                'max_tokens': kwargs.get('max_tokens', 1000),
-                'messages': [{'role': 'user', 'content': prompt}]
-            }
-            
-            response = requests.post(
-                f'{self.base_url}/messages',
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return AIResponse(
-                    success=True,
-                    text=result['content'][0]['text'],
-                    provider=self.provider_name,
-                    usage=result.get('usage')
-                )
-            else:
-                return AIResponse(
-                    success=False,
-                    text="",
-                    error=f"Anthropic API error: {response.status_code} - {response.text}",
-                    provider=self.provider_name
-                )
-                
-        except Exception as e:
-            return AIResponse(
-                success=False,
-                text="",
-                error=f"Anthropic error: {str(e)}",
-                provider=self.provider_name
-            )
+    def __init__(self):
+        self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.client = None
+        if self.api_key:
+            try:
+                import anthropic
+                self.client = anthropic.Anthropic(api_key=self.api_key)
+            except ImportError:
+                logger.error("anthropic package not installed")
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic: {e}")
     
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
+        return self.api_key is not None and self.client is not None
     
-    @property
-    def provider_name(self) -> str:
-        return f"Anthropic ({self.model})"
+    def generate_text(self, prompt: str) -> str:
+        if not self.client:
+            raise Exception("Anthropic client not initialized")
+        
+        response = self.client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        return response.content[0].text
 
 class HuggingFaceProvider(BaseAIProvider):
-    """Hugging Face Inference API Provider (Free tier available)"""
-    
-    def __init__(self, api_key: str, model: str = "microsoft/DialoGPT-medium", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self.base_url = f'https://api-inference.huggingface.co/models/{model}'
-    
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        if not self.is_configured():
-            return AIResponse(
-                success=False,
-                text="",
-                error="Hugging Face API key not configured",
-                provider=self.provider_name
-            )
-        
-        try:
-            headers = {
-                'Authorization': f'Bearer {self.api_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            data = {
-                'inputs': prompt,
-                'parameters': {
-                    'max_length': kwargs.get('max_tokens', 200),
-                    'temperature': kwargs.get('temperature', 0.7),
-                    'do_sample': True
-                }
-            }
-            
-            response = requests.post(
-                self.base_url,
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    text = result[0].get('generated_text', '')
-                    # Remove the original prompt from response if present
-                    if text.startswith(prompt):
-                        text = text[len(prompt):].strip()
-                    
-                    return AIResponse(
-                        success=True,
-                        text=text,
-                        provider=self.provider_name
-                    )
-                else:
-                    return AIResponse(
-                        success=False,
-                        text="",
-                        error="Unexpected response format from Hugging Face",
-                        provider=self.provider_name
-                    )
-            else:
-                return AIResponse(
-                    success=False,
-                    text="",
-                    error=f"Hugging Face API error: {response.status_code} - {response.text}",
-                    provider=self.provider_name
-                )
-                
-        except Exception as e:
-            return AIResponse(
-                success=False,
-                text="",
-                error=f"Hugging Face error: {str(e)}",
-                provider=self.provider_name
-            )
+    def __init__(self):
+        self.api_key = os.getenv("HUGGINGFACE_API_KEY")
+        self.client = None
+        if self.api_key:
+            try:
+                from transformers import pipeline
+                self.client = pipeline("text-generation", model="gpt2")
+            except ImportError:
+                logger.error("transformers package not installed")
+            except Exception as e:
+                logger.error(f"Failed to initialize HuggingFace: {e}")
     
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
+        return self.api_key is not None and self.client is not None
     
-    @property
-    def provider_name(self) -> str:
-        return f"Hugging Face ({self.model})"
-
-class OpenRouterProvider(BaseAIProvider):
-    """OpenRouter AI Provider (Provides access to multiple AI models)"""
-    
-    def __init__(self, api_key: str, model: str = "google/gemini-flash-1.5", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self.base_url = 'https://openrouter.ai/api/v1'
-    
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        if not self.is_configured():
-            return AIResponse(
-                success=False,
-                text="",
-                error="OpenRouter API key not configured",
-                provider=self.provider_name
-            )
+    def generate_text(self, prompt: str) -> str:
+        if not self.client:
+            raise Exception("HuggingFace client not initialized")
         
-        try:
-            headers = {
-                'Authorization': f'Bearer {self.api_key}',
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://lifecompass-ai.com',
-                'X-Title': 'LifeCompass AI'
-            }
-            
-            data = {
-                'model': self.model,
-                'messages': [
-                    {'role': 'user', 'content': prompt}
-                ],
-                'max_tokens': kwargs.get('max_tokens', 1000),
-                'temperature': kwargs.get('temperature', 0.7)
-            }
-            
-            response = requests.post(
-                f'{self.base_url}/chat/completions',
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'choices' in result and len(result['choices']) > 0:
-                    return AIResponse(
-                        success=True,
-                        text=result['choices'][0]['message']['content'],
-                        provider=self.provider_name,
-                        usage=result.get('usage')
-                    )
-                else:
-                    return AIResponse(
-                        success=False,
-                        text="",
-                        error="No response content from OpenRouter",
-                        provider=self.provider_name
-                    )
-            else:
-                return AIResponse(
-                    success=False,
-                    text="",
-                    error=f"OpenRouter API error: {response.status_code} - {response.text}",
-                    provider=self.provider_name
-                )
-                
-        except Exception as e:
-            return AIResponse(
-                success=False,
-                text="",
-                error=f"OpenRouter error: {str(e)}",
-                provider=self.provider_name
-            )
-    
-    def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
-    
-    @property
-    def provider_name(self) -> str:
-        return f"OpenRouter ({self.model})"
+        response = self.client(prompt, max_length=200, num_return_sequences=1)
+        return response[0]['generated_text']
 
 class OllamaProvider(BaseAIProvider):
-    """Ollama Local AI Provider (Free)"""
-    
-    def __init__(self, api_key: str = "", model: str = "llama2", base_url: str = "http://localhost:11434", **kwargs):
-        super().__init__(api_key, **kwargs)
-        self.model = model
-        self.base_url = base_url.rstrip('/')
-    
-    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
-        try:
-            data = {
-                'model': self.model,
-                'prompt': prompt,
-                'stream': False
-            }
-            
-            response = requests.post(
-                f'{self.base_url}/api/generate',
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return AIResponse(
-                    success=True,
-                    text=result.get('response', ''),
-                    provider=self.provider_name
-                )
-            else:
-                return AIResponse(
-                    success=False,
-                    text="",
-                    error=f"Ollama API error: {response.status_code} - {response.text}",
-                    provider=self.provider_name
-                )
-                
-        except Exception as e:
-            return AIResponse(
-                success=False,
-                text="",
-                error=f"Ollama error: {str(e)}. Make sure Ollama is running locally.",
-                provider=self.provider_name
-            )
+    def __init__(self):
+        self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.model = os.getenv("OLLAMA_MODEL", "llama2")
     
     def is_configured(self) -> bool:
-        # Check if Ollama is accessible
+        # Check if Ollama is running locally
         try:
-            response = requests.get(f'{self.base_url}/api/tags', timeout=5)
+            import requests
+            response = requests.get(f"{self.base_url}/api/tags", timeout=2)
             return response.status_code == 200
         except:
             return False
     
-    @property
-    def provider_name(self) -> str:
-        return f"Ollama ({self.model})"
-
-class AIProviderManager:
-    """Manages multiple AI providers and routing"""
-    
-    def __init__(self):
-        self.providers: Dict[str, BaseAIProvider] = {}
-        self.primary_provider: Optional[str] = None
-        self._load_providers()
-    
-    def _load_providers(self):
-        """Load providers based on environment variables"""
-        
-        # Google Gemini
-        if os.getenv('GOOGLE_API_KEY'):
-            self.providers['google'] = GoogleGeminiProvider(
-                api_key=os.getenv('GOOGLE_API_KEY'),
-                model=os.getenv('GOOGLE_MODEL', 'gemini-1.5-flash')
+    def generate_text(self, prompt: str) -> str:
+        try:
+            import requests
+            
+            data = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json=data,
+                timeout=30
             )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "No response generated")
+            else:
+                raise Exception(f"Ollama API error: {response.status_code}")
         
-        # OpenAI
-        if os.getenv('OPENAI_API_KEY'):
-            self.providers['openai'] = OpenAIProvider(
-                api_key=os.getenv('OPENAI_API_KEY'),
-                model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
-            )
-        
-        # Anthropic
-        if os.getenv('ANTHROPIC_API_KEY'):
-            self.providers['anthropic'] = AnthropicProvider(
-                api_key=os.getenv('ANTHROPIC_API_KEY'),
-                model=os.getenv('ANTHROPIC_MODEL', 'claude-3-sonnet-20240229')
-            )
-        
-        # Hugging Face
-        if os.getenv('HUGGINGFACE_API_KEY'):
-            self.providers['huggingface'] = HuggingFaceProvider(
-                api_key=os.getenv('HUGGINGFACE_API_KEY'),
-                model=os.getenv('HUGGINGFACE_MODEL', 'microsoft/DialoGPT-medium')
-            )
-        
-        # OpenRouter
-        if os.getenv('OPENROUTER_API_KEY'):
-            self.providers['openrouter'] = OpenRouterProvider(
-                api_key=os.getenv('OPENROUTER_API_KEY'),
-                model=os.getenv('OPENROUTER_MODEL', 'google/gemini-flash-1.5')
-            )
-        
-        # Ollama (local)
-        ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
-        ollama_provider = OllamaProvider(
-            base_url=ollama_url,
-            model=os.getenv('OLLAMA_MODEL', 'llama2')
-        )
-        if ollama_provider.is_configured():
-            self.providers['ollama'] = ollama_provider
-        
-        # Set primary provider
-        self.primary_provider = os.getenv('PRIMARY_AI_PROVIDER', self._get_first_available_provider())
-    
-    def _get_first_available_provider(self) -> Optional[str]:
-        """Get the first configured provider"""
-        for provider_id, provider in self.providers.items():
-            if provider.is_configured():
-                return provider_id
-        return None
-    
-    def get_provider(self, provider_id: Optional[str] = None) -> Optional[BaseAIProvider]:
-        """Get a specific provider or the primary one"""
-        if provider_id and provider_id in self.providers:
-            return self.providers[provider_id]
-        elif self.primary_provider and self.primary_provider in self.providers:
-            return self.providers[self.primary_provider]
-        return None
-    
-    def generate_response(self, prompt: str, provider_id: Optional[str] = None, **kwargs) -> AIResponse:
-        """Generate response using specified or primary provider"""
-        provider = self.get_provider(provider_id)
-        
-        if not provider:
-            return AIResponse(
-                success=False,
-                text="",
-                error="No AI provider configured. Please set up at least one AI API key.",
-                provider="None"
-            )
-        
-        return provider.generate_response(prompt, **kwargs)
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get status of all providers"""
-        status = {
-            'configured_providers': [],
-            'available_providers': [
-                'google', 'openai', 'anthropic', 'huggingface', 'openrouter', 'ollama'
-            ],
-            'primary_provider': self.primary_provider,
-            'total_configured': 0
-        }
-        
-        for provider_id, provider in self.providers.items():
-            if provider.is_configured():
-                status['configured_providers'].append({
-                    'id': provider_id,
-                    'name': provider.provider_name,
-                    'status': 'ready'
-                })
-                status['total_configured'] += 1
-        
-        return status
+        except Exception as e:
+            raise Exception(f"Failed to generate text with Ollama: {e}")

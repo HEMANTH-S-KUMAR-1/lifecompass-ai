@@ -1,6 +1,13 @@
 # 🚀 LifeCompass AI - Quick Run Guide
 
-> **Complete commands to run the LifeCompass AI project without testing**
+> **Complete commands to run t# Optional: Environment Configuration
+```powershell
+# Backend environment configuration options:
+# - Configure your AI provider API Key in .env file
+# - For testing without API keys: Add ENABLE_MOCK_AI=true to your .env
+# - Supabase Database: Set up connection in .env
+# - AI Provider: Choose your preferred provider in .env
+```Compass AI project without testing**
 
 ## 📋 Prerequisites
 
@@ -16,20 +23,26 @@
 ### **Single Command Setup**
 ```powershell
 # Clone and run automated setup
-git clone https://github.com/yourusername/lifecompass-ai.git
-cd lifecompass-ai
+git clone https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai.git
+cd Lifecompass-ai
+# Run the setup script
 .\setup.ps1
 ```
 
 ### **Run Both Servers**
 ```powershell
 # Terminal 1: Backend
-& C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-backend
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+# First create and activate virtual environment if it doesn't exist
+cd C:\PROJECT\Lifecompass-ai
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+cd lifecompass-ai-backend
+pip install -r requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 # Terminal 2: Frontend (open new terminal)
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-frontend
+cd C:\PROJECT\Lifecompass-ai\lifecompass-ai-frontend
+npm install
 npm run dev
 ```
 
@@ -39,8 +52,8 @@ npm run dev
 
 ### **1. Clone Repository**
 ```powershell
-git clone https://github.com/yourusername/lifecompass-ai.git
-cd lifecompass-ai
+git clone https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai.git
+cd Lifecompass-ai
 ```
 
 ### **2. Backend Setup**
@@ -66,23 +79,24 @@ npm install
 ### **4. Environment Configuration**
 ```powershell
 # Backend environment is already configured with:
-# - OpenRouter API Key: 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
-# - Supabase Database: Connected and ready
-# - AI Provider: OpenRouter (Gemini 1.5 Flash 8B)
+# - Configure your OpenRouter API Key in .env file
+# - Supabase Database: Set up connection in .env
+# - AI Provider: Choose your preferred provider in .env
 ```
 
 ### **5. Run Backend Server**
 ```powershell
 # Terminal 1: Backend
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-backend
-& C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+cd C:\PROJECT\Lifecompass-ai
+.\.venv\Scripts\Activate.ps1
+cd lifecompass-ai-backend
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ### **6. Run Frontend Server**
 ```powershell
 # Terminal 2: Frontend (open new terminal)
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-frontend
+cd C:\PROJECT\Lifecompass-ai\lifecompass-ai-frontend
 npm run dev
 ```
 
@@ -103,16 +117,18 @@ npm run dev
 ### **For existing setup:**
 ```powershell
 # Terminal 1: Start Backend
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-backend && & C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1 && uvicorn main:app --reload --host 127.0.0.1 --port 8000
+cd C:\PROJECT\Lifecompass-ai && .\.venv\Scripts\Activate.ps1 && cd lifecompass-ai-backend && python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 # Terminal 2: Start Frontend
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-frontend && npm run dev
+cd C:\PROJECT\Lifecompass-ai\lifecompass-ai-frontend && npm run dev
 ```
 
 ### **For fresh installation:**
 ```powershell
 # Complete setup and run
-git clone https://github.com/yourusername/lifecompass-ai.git && cd lifecompass-ai && .\setup.ps1
+git clone https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai.git
+cd Lifecompass-ai
+.\setup.ps1
 ```
 
 ---
@@ -124,12 +140,13 @@ git clone https://github.com/yourusername/lifecompass-ai.git && cd lifecompass-a
 # 1. Open two terminals
 
 # Terminal 1 - Backend:
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-backend
-& C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+cd C:\PROJECT\Lifecompass-ai
+.\.venv\Scripts\Activate.ps1
+cd lifecompass-ai-backend
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 # Terminal 2 - Frontend:
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-frontend
+cd C:\PROJECT\Lifecompass-ai\lifecompass-ai-frontend
 npm run dev
 ```
 
@@ -161,8 +178,8 @@ npm run dev
 
 ### **Backend (FastAPI):**
 - **Port**: 8000
-- **AI Provider**: OpenRouter (Gemini 1.5 Flash 8B)
-- **Database**: Supabase (Connected)
+- **AI Provider**: Configure in .env file
+- **Database**: Supabase 
 - **Environment**: Development with auto-reload
 
 ### **Frontend (React + Vite):**
@@ -200,8 +217,7 @@ npm run dev
 ```
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ✅ Supabase connection established successfully
-✅ AI Provider Manager initialized with 1 provider(s)
-  ✓ OpenRouter (google/gemini-flash-1.5-8b) - ready
+✅ AI Provider Manager initialized
 INFO:     Application startup complete.
 ```
 
@@ -216,11 +232,11 @@ VITE v5.4.19  ready in 192 ms
 
 ## 🔗 **Important Notes**
 
-1. **API Key**: OpenRouter key is already configured and working
-2. **Database**: Supabase connection is pre-configured
+1. **API Keys**: Configure your API keys in the .env file
+2. **Database**: Set up Supabase connection in .env file
 3. **CORS**: Backend allows frontend connections
 4. **Auto-reload**: Both servers restart automatically on code changes
-5. **Chat Interface**: Fully functional AI career advisor
+5. **Chat Interface**: AI career advisor functionality
 
 ---
 
@@ -229,16 +245,30 @@ VITE v5.4.19  ready in 192 ms
 ### **"Sorry, I'm having trouble connecting to the AI service" Error:**
 ```powershell
 # This means the backend is not running. Start it with:
-cd C:\PROJECT\lifecompass-ai\lifecompass-ai-backend
-& C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+cd C:\PROJECT\Lifecompass-ai
+.\.venv\Scripts\Activate.ps1
+cd lifecompass-ai-backend
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### **Permission Denied Error When Running setup.ps1:**
+```powershell
+# If you see "Permission denied" errors, try these steps:
+# 1. Run PowerShell as Administrator
+# 2. Delete the problematic virtual environment
+cd C:\PROJECT\Lifecompass-ai
+Remove-Item -Recurse -Force .venv -ErrorAction SilentlyContinue
+# 3. Run setup again
+.\setup.ps1
 ```
 
 ### **Backend Won't Start:**
 ```powershell
 # Ensure virtual environment is activated
-& C:/PROJECT/lifecompass-ai/.venv/Scripts/Activate.ps1
+cd C:\PROJECT\Lifecompass-ai
+.\.venv\Scripts\Activate.ps1
 # Reinstall dependencies
+cd lifecompass-ai-backend
 pip install -r requirements.txt
 ```
 

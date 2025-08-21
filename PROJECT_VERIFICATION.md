@@ -4,7 +4,7 @@
 
 **Date:** August 21, 2025  
 **Status:** ✅ FULLY VERIFIED AND GITHUB READY  
-**Repository:** [HEMANTH-S-KUMAR-1/livestock-management-system](https://github.com/HEMANTH-S-KUMAR-1/livestock-management-system)
+**Repository:** [HEMANTH-S-KUMAR-1/Lifecompass-ai](https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai)
 
 ---
 
@@ -136,7 +136,7 @@ LifeCompass AI has been successfully transformed from a basic career guidance to
 - **Status**: ✅ Successfully pushed to main branch
 - **Commit**: `94f36e4` - Complete Multi-Provider System
 - **Latest Fix**: `cb5bf82` - Frontend build error resolved
-- **URL**: https://github.com/HEMANTH-S-KUMAR-1/livestock-management-system
+- **URL**: https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai
 
 ### ✅ Ready for Production
 - Environment configuration documented
@@ -165,7 +165,7 @@ The project is now ready for users to clone, configure with their preferred AI A
 
 ## 🔗 Quick Links
 
-- **Repository**: https://github.com/HEMANTH-S-KUMAR-1/livestock-management-system
+- **Repository**: https://github.com/HEMANTH-S-KUMAR-1/Lifecompass-ai
 - **Setup Guide**: [README.md](README.md)
 - **API Documentation**: [lifecompass-ai-backend/README.md](lifecompass-ai-backend/README.md)
 - **Deployment Guide**: [DEPLOYMENT.md](DEPLOYMENT.md)

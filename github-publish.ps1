@@ -1,7 +1,7 @@
 # GitHub Publishing Script for LifeCompass AI
 # This script helps prepare and push the project to GitHub
 
-$RepoName = "livestock-management-system"
+$RepoName = "Lifecompass-ai"
 $RepoOwner = "HEMANTH-S-KUMAR-1"
 $RepoUrl = "https://github.com/$RepoOwner/$RepoName.git"
 
@@ -27,10 +27,22 @@ Get-ChildItem -Path . -Include "__pycache__" -Recurse -Force | ForEach-Object {
     Remove-Item -Path $_ -Recurse -Force
 }
 
+# Remove .pyc files
+Get-ChildItem -Path . -Include "*.pyc","*.pyo","*.pyd" -Recurse -Force | ForEach-Object {
+    Write-Host "Removing: $_" -ForegroundColor Gray
+    Remove-Item -Path $_ -Force
+}
+
 # Remove node_modules if they exist
 Get-ChildItem -Path . -Include "node_modules" -Recurse -Force | ForEach-Object {
     Write-Host "Removing: $_" -ForegroundColor Gray
     Remove-Item -Path $_ -Recurse -Force
+}
+
+# Remove npm logs
+Get-ChildItem -Path . -Include "npm-debug.log*","yarn-debug.log*","yarn-error.log*" -Recurse -Force | ForEach-Object {
+    Write-Host "Removing: $_" -ForegroundColor Gray
+    Remove-Item -Path $_ -Force
 }
 
 # Remove .env files if they exist (but keep .env.example)
@@ -73,8 +85,26 @@ git commit -m $commitMessage
 # Push to GitHub
 Write-Host "Ready to push to GitHub!" -ForegroundColor Green
 Write-Host ""
-Write-Host "To push your changes to GitHub, run:" -ForegroundColor Cyan
-Write-Host "git push -u origin main" -ForegroundColor White
+
+# Check if GitHub CLI is available
+try {
+    $ghInstalled = $null -ne (Get-Command gh -ErrorAction SilentlyContinue)
+    
+    if ($ghInstalled) {
+        Write-Host "GitHub CLI detected! You can use the following commands:" -ForegroundColor Cyan
+        Write-Host "1. Create and push to a new repository:" -ForegroundColor White
+        Write-Host "   gh repo create $RepoName --source=. --push --public" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "2. Or push to an existing repository:" -ForegroundColor White
+        Write-Host "   git push -u origin main" -ForegroundColor Yellow
+    } else {
+        Write-Host "To push your changes to GitHub, run:" -ForegroundColor Cyan
+        Write-Host "git push -u origin main" -ForegroundColor White
+    }
+} catch {
+    Write-Host "To push your changes to GitHub, run:" -ForegroundColor Cyan
+    Write-Host "git push -u origin main" -ForegroundColor White
+}
 Write-Host ""
 Write-Host "Repository URL: $RepoUrl" -ForegroundColor Green
 
