@@ -2,6 +2,9 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # Load environment variables from .env file
 load_dotenv()
@@ -9,7 +12,7 @@ load_dotenv()
 try:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
 except ImportError as e:
     print(f"FastAPI dependencies not installed. Run: pip install -r requirements.txt")
     print(f"Missing: {e}")
@@ -30,10 +33,23 @@ except ImportError as e:
     print("Please ensure ai_providers.py is in the same directory.")
     exit(1)
 
+# Import ATS modules
+try:
+    from models import Base, User, JobPosting, Application, UserRole, JobStatus, ApplicationStatus
+    from job_postings import JobPostingService, validate_job_posting_data, format_job_posting_for_api
+    from application_tracking import ApplicationService, format_application_for_api, validate_application_data
+    from chat_interface import ChatService, format_message_for_api, validate_message_data
+    from user_roles import RoleManager, require_role, require_authentication, set_current_user, get_current_user
+except ImportError as e:
+    print(f"ATS modules not found: {e}")
+    print("Please ensure all ATS modules are in the same directory.")
+    exit(1)
+
 # --- Environment Configuration ---
 # Load API keys from environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") 
+DATABASE_URL = os.getenv("DATABASE_URL", f"postgresql://postgres:{os.getenv('DB_PASSWORD', 'password')}@localhost:5432/ats_db")
 
 # Check if required environment variables are set
 if not SUPABASE_URL:
@@ -41,6 +57,26 @@ if not SUPABASE_URL:
 if not SUPABASE_KEY:
     print("WARNING: SUPABASE_KEY environment variable not set!")
 # --------------------------------
+
+# --- Database Setup ---
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Create tables
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created/verified")
+except Exception as e:
+    print(f"⚠️ Database setup warning: {e}")
+
+# Database dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+# ----------------------
 
 # --- Initializations ---
 # Initialize Supabase connection using the new manager
@@ -71,8 +107,8 @@ else:
 # FastAPI app instance
 app = FastAPI(
     title="LifeCompass AI Backend",
-    description="Career guidance platform with multi-AI provider support",
-    version="2.0.0"
+    description="ATS platform with multi-AI provider support and real-time chat",
+    version="3.0.0"
 )
 # -----------------------
 
@@ -80,6 +116,42 @@ app = FastAPI(
 class ChatMessage(BaseModel):
     message: str
     provider: Optional[str] = None  # Allow users to specify AI provider
+
+class JobPostingCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    company_name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=10)
+    requirements: Optional[str] = None
+    responsibilities: Optional[str] = None
+    location: Optional[str] = None
+    is_remote: bool = False
+    work_type: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    currency: str = "USD"
+    department: Optional[str] = None
+    experience_level: Optional[str] = None
+    skills_required: Optional[list] = []
+    skills_preferred: Optional[list] = []
+
+class ApplicationCreate(BaseModel):
+    job_posting_id: str
+    cover_letter: Optional[str] = None
+    resume_url: str
+    resume_filename: str
+    answers: Optional[dict] = {}
+
+class ApplicationStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+class ChatMessageCreate(BaseModel):
+    recipient_id: str
+    message: str
+    application_id: Optional[str] = None
+    message_type: str = "text"
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
 
 class APIConfig(BaseModel):
     supabase_url: Optional[str] = None
@@ -114,9 +186,9 @@ def read_root():
     ai_status = ai_manager.get_status()
     supabase_configured = is_supabase_configured() if supabase_manager else False
     return {
-        "message": "Welcome to the LifeCompass AI Backend!",
+        "message": "Welcome to the LifeCompass ATS Backend!",
         "status": "running",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "supabase_configured": supabase_configured,
         "ai_providers": ai_status
     }
@@ -181,6 +253,214 @@ def get_health_status():
             "ai_providers": ai_status
         }
     }
+
+# --- Job Posting Endpoints ---
+@app.post("/api/jobs")
+def create_job_posting(job_data: JobPostingCreate, db: Session = Depends(get_db)):
+    """Create a new job posting (recruiters only)"""
+    current_user = get_current_user()
+    if not current_user or current_user.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only recruiters can create job postings")
+    
+    # Validate job data
+    validation_errors = validate_job_posting_data(job_data.dict())
+    if validation_errors:
+        raise HTTPException(status_code=400, detail=validation_errors)
+    
+    job_service = JobPostingService(db)
+    try:
+        job_posting = job_service.create_job_posting(job_data.dict(), current_user.id)
+        return format_job_posting_for_api(job_posting)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/jobs")
+def get_job_postings(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    location: Optional[str] = None,
+    work_type: Optional[str] = None,
+    is_remote: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    """Get job postings with filtering"""
+    job_service = JobPostingService(db)
+    jobs = job_service.get_job_postings(
+        skip=skip, limit=limit, search=search, location=location,
+        work_type=work_type, is_remote=is_remote
+    )
+    return [format_job_posting_for_api(job) for job in jobs]
+
+@app.get("/api/jobs/{job_id}")
+def get_job_posting(job_id: str, db: Session = Depends(get_db)):
+    """Get a specific job posting"""
+    job_service = JobPostingService(db)
+    job_posting = job_service.get_job_posting(job_id)
+    
+    if not job_posting:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+    
+    return format_job_posting_for_api(job_posting)
+
+@app.put("/api/jobs/{job_id}")
+def update_job_posting(job_id: str, job_data: JobPostingCreate, db: Session = Depends(get_db)):
+    """Update a job posting (recruiters only)"""
+    current_user = get_current_user()
+    if not current_user or current_user.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only recruiters can update job postings")
+    
+    job_service = JobPostingService(db)
+    job_posting = job_service.update_job_posting(job_id, job_data.dict(), current_user.id)
+    
+    if not job_posting:
+        raise HTTPException(status_code=404, detail="Job posting not found or access denied")
+    
+    return format_job_posting_for_api(job_posting)
+
+# --- Application Endpoints ---
+@app.post("/api/applications")
+def submit_application(application_data: ApplicationCreate, db: Session = Depends(get_db)):
+    """Submit a job application (job seekers only)"""
+    current_user = get_current_user()
+    if not current_user or current_user.role != UserRole.JOB_SEEKER:
+        raise HTTPException(status_code=403, detail="Only job seekers can submit applications")
+    
+    # Validate application data
+    validation_errors = validate_application_data(application_data.dict())
+    if validation_errors:
+        raise HTTPException(status_code=400, detail=validation_errors)
+    
+    application_service = ApplicationService(db)
+    try:
+        application = application_service.submit_application(
+            application_data.job_posting_id,
+            current_user.id,
+            application_data.dict()
+        )
+        return format_application_for_api(application)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/applications")
+def get_user_applications(db: Session = Depends(get_db)):
+    """Get applications for current user"""
+    current_user = get_current_user()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    application_service = ApplicationService(db)
+    applications = application_service.get_applications_by_user(current_user.id)
+    
+    return [format_application_for_api(app) for app in applications]
+
+@app.get("/api/jobs/{job_id}/applications")
+def get_job_applications(job_id: str, db: Session = Depends(get_db)):
+    """Get applications for a specific job (recruiters only)"""
+    current_user = get_current_user()
+    if not current_user or current_user.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only recruiters can view job applications")
+    
+    application_service = ApplicationService(db)
+    try:
+        applications = application_service.get_applications_for_job(job_id, current_user.id)
+        return [format_application_for_api(app) for app in applications]
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.put("/api/applications/{application_id}/status")
+def update_application_status(
+    application_id: str, 
+    status_update: ApplicationStatusUpdate, 
+    db: Session = Depends(get_db)
+):
+    """Update application status (recruiters only)"""
+    current_user = get_current_user()
+    if not current_user or current_user.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only recruiters can update application status")
+    
+    try:
+        status_enum = ApplicationStatus(status_update.status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid status value")
+    
+    application_service = ApplicationService(db)
+    try:
+        application = application_service.update_application_status(
+            application_id, status_enum, current_user.id, status_update.notes
+        )
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found or access denied")
+        
+        return format_application_for_api(application)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+# --- Chat Endpoints ---
+@app.post("/api/messages")
+def send_message(message_data: ChatMessageCreate, db: Session = Depends(get_db)):
+    """Send a chat message"""
+    current_user = get_current_user()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Validate message data
+    validation_errors = validate_message_data(message_data.dict())
+    if validation_errors:
+        raise HTTPException(status_code=400, detail=validation_errors)
+    
+    chat_service = ChatService(db)
+    try:
+        message = chat_service.send_message(
+            current_user.id,
+            message_data.recipient_id,
+            message_data.message,
+            message_data.application_id,
+            message_data.message_type,
+            message_data.file_url,
+            message_data.file_name
+        )
+        return format_message_for_api(message)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/conversations")
+def get_user_conversations(db: Session = Depends(get_db)):
+    """Get all conversations for current user"""
+    current_user = get_current_user()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    chat_service = ChatService(db)
+    conversations = chat_service.get_user_conversations(current_user.id)
+    
+    return conversations
+
+@app.get("/api/conversations/{partner_id}")
+def get_conversation(partner_id: str, application_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get conversation with a specific user"""
+    current_user = get_current_user()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    chat_service = ChatService(db)
+    messages = chat_service.get_conversation(current_user.id, partner_id, application_id)
+    
+    return [format_message_for_api(msg) for msg in messages]
+
+@app.put("/api/conversations/{partner_id}/read")
+def mark_messages_read(partner_id: str, application_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """Mark messages as read"""
+    current_user = get_current_user()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    chat_service = ChatService(db)
+    count = chat_service.mark_messages_as_read(current_user.id, partner_id, application_id)
+    
+    return {"marked_read": count}
 
 @app.get("/api/database/status")
 def get_database_status():
