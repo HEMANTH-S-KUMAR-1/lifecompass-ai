@@ -4,14 +4,16 @@
  */
 
 // Environment-based API configuration
-const API_CONFIG = {
+export const API_CONFIG = {
   development: {
     baseURL: 'http://localhost:8000',
     timeout: 10000,
+    offlineMode: true, // Enable offline mode for development by default
   },
   production: {
     baseURL: process.env.REACT_APP_API_URL || 'https://your-backend-domain.com',
     timeout: 15000,
+    offlineMode: false,
   }
 };
 

@@ -7,7 +7,25 @@ import axios from 'axios';
 import { API_CLIENT_CONFIG, API_ENDPOINTS, createApiUrl } from '../config/api.js';
 
 // Create axios instance with default configuration
-const apiClient = axios.create(API_CLIENT_CONFIG);
+const apiClient = axios.create({
+  ...API_CLIENT_CONFIG,
+  timeout: 5000, // Shorter timeout for better UX
+});
+
+// Add a timeout promise to handle network issues
+const withTimeout = (promise, timeoutDuration) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Request timed out'));
+    }, timeoutDuration);
+  });
+
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]).finally(() => clearTimeout(timeoutId));
+};
 
 // Request interceptor for adding auth tokens (future use)
 apiClient.interceptors.request.use(
@@ -38,17 +56,33 @@ apiClient.interceptors.response.use(
   }
 );
 
+import { isOfflineMode, mockApiResponse } from './offlineMode.js';
+
 // Health and Configuration Services
 export const healthService = {
   // Check backend connection and configuration
   checkStatus: async () => {
+    // Check if we're in offline mode first
+    if (isOfflineMode()) {
+      return {
+        success: true,
+        data: await mockApiResponse('health'),
+        offline: true
+      };
+    }
+    
     try {
-      const response = await apiClient.get(API_ENDPOINTS.root);
+      // Use a shorter timeout for health checks
+      const response = await withTimeout(
+        apiClient.get(API_ENDPOINTS.root),
+        3000 // 3 second timeout
+      );
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      console.error("Health check failed:", error.message);
       return {
         success: false,
         error: error.message || 'Connection failed'

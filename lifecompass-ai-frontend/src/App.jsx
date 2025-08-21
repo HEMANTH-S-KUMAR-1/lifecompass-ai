@@ -16,6 +16,7 @@ const ChatInterface = lazy(() => import('./components/ChatInterface.jsx'));
 import { healthService, userService, chatService } from './services/api.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import LoadingFallback from './components/LoadingFallback.jsx';
+import StatusIndicator from './components/StatusIndicator.jsx';
 
 export default function App() {
     const [currentPage, setCurrentPage] = useState('home');
@@ -42,7 +43,7 @@ export default function App() {
     };
 
     useEffect(() => {
-        // Check backend status
+        // Check backend status - but don't block rendering
         const checkBackendStatus = async () => {
             try {
                 const result = await healthService.checkStatus();
@@ -51,6 +52,7 @@ export default function App() {
                         connected: true,
                         message: 'Connected'
                     });
+                    console.log("Backend connected successfully");
                 } else {
                     console.warn("Backend connection failed:", result.error);
                     setBackendStatus({
@@ -67,9 +69,17 @@ export default function App() {
             }
         };
         
-        checkBackendStatus();
+        // Set default state immediately to prevent rendering blocks
+        setBackendStatus({
+            connected: false,
+            message: 'Checking connection...'
+        });
+        
         // Auto-login with mock user for demo purposes
         setCurrentUser(mockUser);
+        
+        // Then check backend status
+        checkBackendStatus();
     }, []);
 
     const navigateTo = (page) => {
@@ -129,31 +139,53 @@ export default function App() {
     };
 
     const renderPage = () => {
+        // Make sure we have a valid current page
+        const validPage = currentPage || 'home';
+        
         return (
             <ErrorBoundary>
                 <Suspense fallback={<LoadingFallback />}>
                     {(() => {
-                        switch (currentPage) {
-                            case 'home':
-                                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
-                            case 'login':
-                                return <Login onLogin={handleLogin} onNavigate={navigateTo} isLoading={isLoading} />;
-                            case 'register':
-                                return <Register onRegister={handleRegister} onNavigate={navigateTo} isLoading={isLoading} />;
-                            case 'profile':
-                                return <Profile currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onNavigate={navigateTo} />;
-                            case 'jobs':
-                                return <JobBoard currentUser={currentUser} />;
-                            case 'dashboard':
-                                if (currentUser?.role === 'recruiter') {
-                                    return <RecruiterDashboard currentUser={currentUser} />;
-                                } else {
+                        try {
+                            switch (validPage) {
+                                case 'home':
+                                    return <Home onNavigate={navigateTo} currentUser={currentUser} />;
+                                case 'login':
+                                    return <Login onLogin={handleLogin} onNavigate={navigateTo} isLoading={isLoading} />;
+                                case 'register':
+                                    return <Register onRegister={handleRegister} onNavigate={navigateTo} isLoading={isLoading} />;
+                                case 'profile':
+                                    return <Profile currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onNavigate={navigateTo} />;
+                                case 'jobs':
                                     return <JobBoard currentUser={currentUser} />;
-                                }
-                            case 'messages':
-                                return <ChatInterface currentUser={currentUser} />;
-                            default:
-                                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
+                                case 'dashboard':
+                                    if (currentUser?.role === 'recruiter') {
+                                        return <RecruiterDashboard currentUser={currentUser} />;
+                                    } else {
+                                        return <JobBoard currentUser={currentUser} />;
+                                    }
+                                case 'messages':
+                                    return <ChatInterface currentUser={currentUser} />;
+                                default:
+                                    return <Home onNavigate={navigateTo} currentUser={currentUser} />;
+                            }
+                        } catch (error) {
+                            console.error("Error rendering page:", error);
+                            return (
+                                <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 rounded-lg text-center">
+                                    <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                                    <h2 className="text-xl font-bold text-red-700 mb-2">Rendering Error</h2>
+                                    <p className="text-gray-600 mb-4">
+                                        Something went wrong while rendering this page. Please try again.
+                                    </p>
+                                    <button 
+                                        onClick={() => navigateTo('home')}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                                    >
+                                        Go to Home
+                                    </button>
+                                </div>
+                            );
                         }
                     })()}
                 </Suspense>
@@ -182,6 +214,7 @@ export default function App() {
                 </motion.div>
             </AnimatePresence>
             {currentPage === 'home' && <Footer onNavigate={navigateTo} />}
+            <StatusIndicator backendStatus={backendStatus} />
         </div>
     );
 }
