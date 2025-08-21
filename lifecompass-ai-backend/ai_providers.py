@@ -311,6 +311,86 @@ class HuggingFaceProvider(BaseAIProvider):
     def provider_name(self) -> str:
         return f"Hugging Face ({self.model})"
 
+class OpenRouterProvider(BaseAIProvider):
+    """OpenRouter AI Provider (Provides access to multiple AI models)"""
+    
+    def __init__(self, api_key: str, model: str = "google/gemini-flash-1.5", **kwargs):
+        super().__init__(api_key, **kwargs)
+        self.model = model
+        self.base_url = 'https://openrouter.ai/api/v1'
+    
+    def generate_response(self, prompt: str, **kwargs) -> AIResponse:
+        if not self.is_configured():
+            return AIResponse(
+                success=False,
+                text="",
+                error="OpenRouter API key not configured",
+                provider=self.provider_name
+            )
+        
+        try:
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://lifecompass-ai.com',
+                'X-Title': 'LifeCompass AI'
+            }
+            
+            data = {
+                'model': self.model,
+                'messages': [
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': kwargs.get('max_tokens', 1000),
+                'temperature': kwargs.get('temperature', 0.7)
+            }
+            
+            response = requests.post(
+                f'{self.base_url}/chat/completions',
+                headers=headers,
+                json=data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'choices' in result and len(result['choices']) > 0:
+                    return AIResponse(
+                        success=True,
+                        text=result['choices'][0]['message']['content'],
+                        provider=self.provider_name,
+                        usage=result.get('usage')
+                    )
+                else:
+                    return AIResponse(
+                        success=False,
+                        text="",
+                        error="No response content from OpenRouter",
+                        provider=self.provider_name
+                    )
+            else:
+                return AIResponse(
+                    success=False,
+                    text="",
+                    error=f"OpenRouter API error: {response.status_code} - {response.text}",
+                    provider=self.provider_name
+                )
+                
+        except Exception as e:
+            return AIResponse(
+                success=False,
+                text="",
+                error=f"OpenRouter error: {str(e)}",
+                provider=self.provider_name
+            )
+    
+    def is_configured(self) -> bool:
+        return bool(self.api_key and self.api_key.strip())
+    
+    @property
+    def provider_name(self) -> str:
+        return f"OpenRouter ({self.model})"
+
 class OllamaProvider(BaseAIProvider):
     """Ollama Local AI Provider (Free)"""
     
@@ -407,6 +487,13 @@ class AIProviderManager:
                 model=os.getenv('HUGGINGFACE_MODEL', 'microsoft/DialoGPT-medium')
             )
         
+        # OpenRouter
+        if os.getenv('OPENROUTER_API_KEY'):
+            self.providers['openrouter'] = OpenRouterProvider(
+                api_key=os.getenv('OPENROUTER_API_KEY'),
+                model=os.getenv('OPENROUTER_MODEL', 'google/gemini-flash-1.5')
+            )
+        
         # Ollama (local)
         ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
         ollama_provider = OllamaProvider(
@@ -453,7 +540,7 @@ class AIProviderManager:
         status = {
             'configured_providers': [],
             'available_providers': [
-                'google', 'openai', 'anthropic', 'huggingface', 'ollama'
+                'google', 'openai', 'anthropic', 'huggingface', 'openrouter', 'ollama'
             ],
             'primary_provider': self.primary_provider,
             'total_configured': 0

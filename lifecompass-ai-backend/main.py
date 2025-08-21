@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,12 +16,12 @@ except ImportError as e:
     exit(1)
 
 try:
-    from supabase import create_client, Client
+    from supabase_config import supabase_manager, is_supabase_configured, get_supabase_status
 except ImportError:
-    print("Supabase not installed. Run: pip install supabase")
-    print("Database features will be disabled.")
-    create_client = None
-    Client = None
+    print("Supabase configuration module not found. Database features will be disabled.")
+    supabase_manager = None
+    is_supabase_configured = lambda: False
+    get_supabase_status = lambda: {"connected": False, "error": "Supabase module not found"}
 
 try:
     from ai_providers import AIProviderManager
@@ -42,16 +43,18 @@ if not SUPABASE_KEY:
 # --------------------------------
 
 # --- Initializations ---
-# Initialize clients only if credentials are available
-supabase = None
-if SUPABASE_URL and SUPABASE_KEY and create_client:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Initialize Supabase connection using the new manager
+if supabase_manager:
+    supabase_status = supabase_manager.get_status()
+    if supabase_status["connected"]:
         print("✅ Supabase client initialized successfully")
-    except Exception as e:
-        print(f"❌ Failed to initialize Supabase client: {e}")
+        supabase = supabase_manager.client
+    else:
+        print(f"❌ Supabase connection failed: {supabase_status.get('error', 'Unknown error')}")
+        supabase = None
 else:
-    print("⚠️ Supabase not configured or library not installed")
+    print("⚠️ Supabase manager not available")
+    supabase = None
 
 # Initialize AI Provider Manager
 ai_manager = AIProviderManager()
@@ -109,11 +112,12 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     ai_status = ai_manager.get_status()
+    supabase_configured = is_supabase_configured() if supabase_manager else False
     return {
         "message": "Welcome to the LifeCompass AI Backend!",
         "status": "running",
         "version": "2.0.0",
-        "supabase_configured": supabase is not None,
+        "supabase_configured": supabase_configured,
         "ai_providers": ai_status
     }
 
@@ -121,8 +125,9 @@ def read_root():
 def get_config():
     """Check which services are configured"""
     ai_status = ai_manager.get_status()
+    supabase_configured = is_supabase_configured() if supabase_manager else False
     return ConfigResponse(
-        supabase_configured=supabase is not None,
+        supabase_configured=supabase_configured,
         ai_providers=ai_status,
         message="Configuration status retrieved successfully"
     )
@@ -134,27 +139,56 @@ def get_ai_providers():
     return AIProvidersResponse(**ai_status)
 
 @app.post("/api/signup")
-def create_job_seeker():
-    if not supabase:
+async def create_job_seeker():
+    if not supabase_manager or not is_supabase_configured():
         raise HTTPException(
             status_code=503, 
             detail="Supabase not configured. Please set SUPABASE_URL and SUPABASE_KEY environment variables."
         )
     
     try:
-        test_email = "test.user@example.com"
-        test_name = "Test User"
-        data, error = supabase.table('job_seekers').insert({"email": test_email, "full_name": test_name}).execute()
+        # Create test user profile
+        test_user_data = {
+            "email": "test.user@example.com",
+            "full_name": "Test User",
+            "role": "job_seeker",
+            "skills": ["Python", "JavaScript", "React"],
+            "experience_level": "intermediate"
+        }
         
-        response_data = data[1] if data and len(data) > 1 else None
+        result = await supabase_manager.create_user_profile(test_user_data)
         
-        if error:
-            error_details = error[1].get('details') if error and len(error) > 1 else "Unknown error"
-            return {"status": "error", "message": error_details}
+        if result["success"]:
+            return {"status": "success", "data": result["data"], "message": result["message"]}
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
             
-        return {"status": "success", "data": response_data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/health")
+def get_health_status():
+    """Get comprehensive health status of all services"""
+    ai_status = ai_manager.get_status()
+    supabase_status = get_supabase_status() if supabase_manager else {"connected": False, "error": "Supabase manager not available"}
+    
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "api": {"status": "running", "version": "2.0.0"},
+            "database": supabase_status,
+            "ai_providers": ai_status
+        }
+    }
+
+@app.get("/api/database/status")
+def get_database_status():
+    """Get detailed database status"""
+    if not supabase_manager:
+        return {"connected": False, "error": "Supabase manager not available"}
+    
+    return supabase_manager.get_health_status()
 
 @app.post("/api/chat")
 def chat_with_ai(chat_message: ChatMessage):
@@ -210,3 +244,8 @@ def chat_with_ai(chat_message: ChatMessage):
             detail=f"Unexpected error: {str(e)}"
         )
 # -----------------------
+
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 Starting LifeCompass AI Backend Server...")
+    uvicorn.run(app, host="127.0.0.1", port=8001)

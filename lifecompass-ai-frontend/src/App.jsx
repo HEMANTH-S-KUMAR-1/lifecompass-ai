@@ -2,6 +2,7 @@ import React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { API_ENDPOINTS, createApiUrl } from './config/api.js';
 import { Users, Briefcase, Compass, Search, MessageSquare, ArrowRight, Menu, X, Linkedin, Twitter, Github, Send, User, Bot, Edit, Save, PlusCircle } from 'lucide-react';
 
 // --- Mock Data ---
@@ -41,7 +42,7 @@ export default function App() {
     });
 
     useEffect(() => {
-        const apiUrl = 'http://localhost:8000/';
+        const apiUrl = createApiUrl(API_ENDPOINTS.root);
         axios.get(apiUrl)
             .then(response => {
                 setBackendStatus({

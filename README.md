@@ -110,13 +110,21 @@ OPENAI_API_KEY=your_openai_key
 ANTHROPIC_API_KEY=your_anthropic_key
 ```
 
-### 4. Optional: Configure Database
+### 4. Configure Database (Recommended)
+
+**Quick Setup**:
 ```bash
 # Get from: https://supabase.com
 # Add to .env:
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
 ```
+
+**Detailed Setup**: See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for complete instructions including:
+- Creating Supabase project
+- Setting up database schema
+- Configuring security policies
+- Testing your setup
 
 ### 5. Start Backend
 ```bash

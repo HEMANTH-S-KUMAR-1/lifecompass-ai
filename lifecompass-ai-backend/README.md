@@ -91,19 +91,37 @@ A FastAPI-based backend for the LifeCompass AI career platform, featuring **mult
      ANTHROPIC_MODEL=claude-3-sonnet-20240229
      ```
 
-5. **Configure Supabase (for database features)**
-   - Go to [supabase.com](https://supabase.com)
-   - Create new project
-   - Go to Settings > API
+5. **Configure Supabase Database (Required for full features)**
+   
+   **Step 1: Create Supabase Project**
+   - Go to [supabase.com](https://supabase.com) and sign up/login
+   - Click "New Project"
+   - Choose your organization and set project details
+   - Wait for the project to be ready (takes ~2 minutes)
+   
+   **Step 2: Get API Credentials**
+   - Go to Settings > API in your Supabase dashboard
+   - Copy the Project URL and anon/public key
    - Add to `.env`:
      ```env
      SUPABASE_URL=https://your-project-id.supabase.co
-     SUPABASE_KEY=your_supabase_anon_key
+     SUPABASE_KEY=your_supabase_anon_key_here
      ```
+   
+   **Step 3: Set Up Database Schema**
+   - Go to SQL Editor in your Supabase dashboard
+   - Copy the contents of `database_schema.sql` (in this directory)
+   - Paste and run the SQL to create all necessary tables
+   - This creates tables for users, chat history, job applications, etc.
+   
+   **Step 4: Configure Security (Optional)**
+   - Row Level Security (RLS) is enabled by default
+   - Authentication is handled by Supabase Auth
+   - Modify RLS policies in SQL Editor if needed
 
 6. **Set Primary Provider (optional)**
    ```env
-   PRIMARY_AI_PROVIDER=google  # or openai, anthropic, huggingface, ollama
+   PRIMARY_AI_PROVIDER=google  # or openai, anthropic, huggingface, openrouter, ollama
    ```
 
 7. **Run the development server**
@@ -119,10 +137,19 @@ A FastAPI-based backend for the LifeCompass AI career platform, featuring **mult
 - `GET /` - Health check with all provider status
 - `GET /api/config` - Detailed configuration status
 - `GET /api/ai-providers` - AI provider information
+- `GET /api/health` - Comprehensive system health check
+- `GET /api/database/status` - Database connection status
 
 ### Core Features
 - `POST /api/signup` - Create job seeker profile
 - `POST /api/chat` - AI-powered career chat with provider selection
+
+### Database Operations (Supabase Required)
+- User profile management
+- Chat history storage and retrieval
+- Job application tracking
+- Resume/CV version management
+- AI-powered job recommendations
 
 #### Chat API Example:
 ```json
@@ -211,6 +238,32 @@ PRIMARY_AI_PROVIDER=google
 2. **Set environment variables** in your hosting platform
 3. **Configure fallback providers** for reliability
 4. **Monitor usage** and costs
+
+## 🔒 Security & Best Practices
+
+### **Environment Variables**
+- **NEVER commit `.env` files** to version control
+- **Always use `.env.example`** as a template
+- **Rotate API keys regularly** especially if exposed
+- **Use different keys** for development and production
+
+### **API Key Security**
+- Store sensitive keys in environment variables only
+- Use hosting platform's secret management (Vercel, Netlify, etc.)
+- Monitor usage to detect unauthorized access
+- Revoke and regenerate keys if compromised
+
+### **Git Security**
+- Ensure `.env` is in `.gitignore`
+- Check commit history for accidentally committed secrets
+- Use `git secrets` or similar tools to prevent key commits
+
+### **Production Deployment**
+- Use HTTPS only
+- Configure CORS properly
+- Implement rate limiting
+- Monitor API usage and costs
+- Set up alerts for unusual activity
 
 ## 🆘 Troubleshooting
 
