@@ -4,7 +4,7 @@ LifeCompass AI is a comprehensive career development platform that helps job see
 
 ## Project Structure
 
-The project consists of two main components:
+The project consists of three main components:
 
 ### Frontend (React + Vite)
 - Modern UI built with React and Vite
@@ -12,11 +12,16 @@ The project consists of two main components:
 - Interactive job board and application tracking
 - Chat interface for AI-assisted career guidance
 
-### Backend (Python)
-- REST API built with Python
-- AI integration for personalized career advice
+### Backend (Python + FastAPI)
+- REST API built with FastAPI
+- Multi-AI provider integration for personalized career advice
 - Supabase for database and authentication
 - Application tracking and job posting management
+
+### ATS Module
+- Dedicated Applicant Tracking System functionality
+- Unit tests with pytest
+- API documentation
 
 ## Getting Started
 
