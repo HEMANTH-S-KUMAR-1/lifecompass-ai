@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 load_dotenv()
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Depends
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel, Field
 except ImportError as e:

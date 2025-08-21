@@ -1,19 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Compass, Menu, X, User as UserIcon, LogOut } from 'lucide-react';
+import { Compass, Menu, X, User as UserIcon, LogOut, AlertCircle } from 'lucide-react';
 
-// Import pages and components
-import Home from './pages/Home.jsx';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import Profile from './pages/Profile.jsx';
-import JobBoard from './components/JobBoard.jsx';
-import ApplicationForm from './components/ApplicationForm.jsx';
-import RecruiterDashboard from './components/RecruiterDashboard.jsx';
-import ChatInterface from './components/ChatInterface.jsx';
+// Import pages and components with error boundaries
+const Home = lazy(() => import('./pages/Home.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
+const JobBoard = lazy(() => import('./components/JobBoard.jsx'));
+const ApplicationForm = lazy(() => import('./components/ApplicationForm.jsx'));
+const RecruiterDashboard = lazy(() => import('./components/RecruiterDashboard.jsx'));
+const ChatInterface = lazy(() => import('./components/ChatInterface.jsx'));
 
 // Import services
 import { healthService, userService, chatService } from './services/api.js';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import LoadingFallback from './components/LoadingFallback.jsx';
 
 export default function App() {
     const [currentPage, setCurrentPage] = useState('home');
@@ -41,26 +43,33 @@ export default function App() {
 
     useEffect(() => {
         // Check backend status
-        healthService.checkStatus()
-            .then(result => {
+        const checkBackendStatus = async () => {
+            try {
+                const result = await healthService.checkStatus();
                 if (result.success) {
                     setBackendStatus({
                         connected: true,
                         message: 'Connected'
                     });
                 } else {
+                    console.warn("Backend connection failed:", result.error);
                     setBackendStatus({
                         connected: false,
-                        message: 'Connection Failed'
+                        message: 'Backend Unavailable: Using Demo Mode'
                     });
                 }
-            })
-            .catch(() => {
+            } catch (error) {
+                console.warn("Backend connection error:", error);
                 setBackendStatus({
                     connected: false,
-                    message: 'Connection Failed'
+                    message: 'Backend Unavailable: Using Demo Mode'
                 });
-            });
+            }
+        };
+        
+        checkBackendStatus();
+        // Auto-login with mock user for demo purposes
+        setCurrentUser(mockUser);
     }, []);
 
     const navigateTo = (page) => {
@@ -120,28 +129,36 @@ export default function App() {
     };
 
     const renderPage = () => {
-        switch (currentPage) {
-            case 'home':
-                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
-            case 'login':
-                return <Login onLogin={handleLogin} onNavigate={navigateTo} isLoading={isLoading} />;
-            case 'register':
-                return <Register onRegister={handleRegister} onNavigate={navigateTo} isLoading={isLoading} />;
-            case 'profile':
-                return <Profile currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onNavigate={navigateTo} />;
-            case 'jobs':
-                return <JobBoard currentUser={currentUser} />;
-            case 'dashboard':
-                if (currentUser?.role === 'recruiter') {
-                    return <RecruiterDashboard currentUser={currentUser} />;
-                } else {
-                    return <JobBoard currentUser={currentUser} />;
-                }
-            case 'messages':
-                return <ChatInterface currentUser={currentUser} />;
-            default:
-                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
-        }
+        return (
+            <ErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                    {(() => {
+                        switch (currentPage) {
+                            case 'home':
+                                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
+                            case 'login':
+                                return <Login onLogin={handleLogin} onNavigate={navigateTo} isLoading={isLoading} />;
+                            case 'register':
+                                return <Register onRegister={handleRegister} onNavigate={navigateTo} isLoading={isLoading} />;
+                            case 'profile':
+                                return <Profile currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onNavigate={navigateTo} />;
+                            case 'jobs':
+                                return <JobBoard currentUser={currentUser} />;
+                            case 'dashboard':
+                                if (currentUser?.role === 'recruiter') {
+                                    return <RecruiterDashboard currentUser={currentUser} />;
+                                } else {
+                                    return <JobBoard currentUser={currentUser} />;
+                                }
+                            case 'messages':
+                                return <ChatInterface currentUser={currentUser} />;
+                            default:
+                                return <Home onNavigate={navigateTo} currentUser={currentUser} />;
+                        }
+                    })()}
+                </Suspense>
+            </ErrorBoundary>
+        );
     };
 
     return (
